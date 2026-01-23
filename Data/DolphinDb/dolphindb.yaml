@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dolphindb-benchmark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dolphindb
+  template:
+    metadata:
+      labels:
+        app: dolphindb
+    spec:
+      nodeName: gpu-001
+      containers:
+      - name: dolphindb
+        image: dockerhub.bigquant.ai:5000/library/dolphindb:v2.00.16.3-odbc-standalone
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "55Gi"
+            cpu: "1"
+          limits:
+            memory: "60Gi"
+            cpu: "4"
+        ports:
+        - containerPort: 8848
+        volumeMounts:
+        - name: feather-source
+          mountPath: /test_data
+          readOnly: true
+      volumes:
+      - name: feather-source
+        hostPath:
+          path: /mnt/bfs/var_app/data/dai/datasource/user/c/pt/cpt_dwc_2026_stock_hs300_snapshot

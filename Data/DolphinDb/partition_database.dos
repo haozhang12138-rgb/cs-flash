@@ -1,0 +1,113 @@
+/* 数据库分区相关操作 */
+
+/* 1. 范围分区 */
+n=1000000
+ID=rand(10, n)
+x=rand(1.0, n)
+t=table(ID, x)
+db=database("dfs://rangedb", RANGE,  0 5 10) // 三个边界，内部两个分区
+
+pt = db.createPartitionedTable(t, `pt, `ID) // t (结构模板表)、`pt (字符串或标签（Symbol），指定要在数据库里创建的表的名字)、`ID (分区列)
+pt.append!(t)
+
+pt=loadTable(db,`pt) // 不是把数据读回内存，而是建立一个逻辑连接。它让变量 pt 重新指向磁盘上的那些分区。
+select count(x) from pt;
+
+
+// 2. 哈希分区
+n=1000000
+ID=rand(10, n)
+x=rand(1.0, n)
+t=table(ID, x)
+db=database("dfs://hashdb", HASH,  [INT, 2]) // 后续建表用来计算哈希值的必须为INT，然后分成2桶
+
+pt = db.createPartitionedTable(t, `pt, `ID)
+pt.append!(t)
+
+pt=loadTable(db,`pt)
+select count(x) from pt;
+
+
+// 3. 值分区
+n=1000000
+month=take(2000.01M..2016.12M, n) // take(X, n) 循环从 X 中取值 n 个，填满 month 这个向量
+x=rand(1.0, n)
+t=table(month, x)
+
+db=database("dfs://valuedb", VALUE, 2000.01M..2016.12M)
+
+pt = db.createPartitionedTable(t, `pt, `month)
+pt.append!(t)
+
+pt=loadTable(db,`pt)
+select count(x) from pt;
+
+
+// 4. 列表分区
+n=1000000
+ticker = rand(`MSFT`GOOG`FB`ORCL`IBM, n)
+x=rand(1.0, n)
+t=table(ticker, x)
+
+db=database("dfs://listdb", LIST, [`IBM`ORCL`MSFT, `GOOG`FB])
+pt = db.createPartitionedTable(t, `pt, `ticker)
+pt.append!(t)
+
+pt=loadTable(db,`pt)
+select count(x) from pt;
+
+
+// 5. 组合 (COMPO) 分区
+n=1000000
+ID=rand(100, n)
+dates=2017.08.07..2017.08.11
+date=rand(dates, n)
+x=rand(10.0, n)
+t=table(ID, date, x)
+
+dbDate = database(, VALUE, 2017.08.07..2017.08.11)
+dbID=database(, RANGE, 0 50 100)
+db = database("dfs://compoDB", COMPO, [dbDate, dbID])
+
+pt = db.createPartitionedTable(t, `pt, `date`ID)
+pt.append!(t)
+
+pt=loadTable(db,`pt)
+select count(x) from pt;
+
+
+// 6. 均匀分区，如何使用 cutPoints
+dates=2020.10.01..2020.10.29;
+syms="A"+string(1..13);
+syms.append!(string('B'..'Z'));
+buckets=cutPoints(syms,5);//cutpoints
+t1=table(take(syms,10000) as stock, rand(dates,10000) as date, rand(10.0,10000) as x);
+dateDomain = database("", VALUE, dates);
+symDomain = database("", RANGE, buckets);
+stockDB = database("dfs://stockDBTest", COMPO, [dateDomain, symDomain]);
+pt = stockDB.createPartitionedTable(t1, `pt, `date`stock).append!(t1);
+
+
+// 7. 不同表相同分区的数据存于同一节点
+dateDomain = database("", VALUE, 2018.05.01..2018.07.01)
+symDomain = database("", RANGE, string('A'..'Z') join `ZZZZZ)
+stockDB = database("dfs://stockDB", COMPO, [dateDomain, symDomain])
+
+quoteSchema = table(10:0, `sym`date`time`bid`bidSize`ask`askSize, [SYMBOL,DATE,TIME,DOUBLE,INT,DOUBLE,INT])
+stockDB.createPartitionedTable(quoteSchema, "quotes", `date`sym)
+
+tradeSchema = table(10:0, `sym`date`time`price`vol, [SYMBOL,DATE,TIME,DOUBLE,INT])
+stockDB.createPartitionedTable(tradeSchema, "trades", `date`sym)
+
+def loadJob(){
+	fileDir='/stockData'
+	filenames = exec filename from files(fileDir)
+	db = database("dfs://stockDB")
+
+	for(fname in filenames){
+		jobId = fname.strReplace(".csv", "")
+		submitJob(jobId,, loadTextEx{db, "quotes", `date`sym, fileDir+'/'+fname})
+	}
+}
+
+pnodeRun(loadJob);
