@@ -30,3 +30,32 @@ t2 = table(`A`B`C as id, 1000 2100 1000 as qty, 50.5 60.5 100.0 as price)
 byRow(all, byColumn(eq, t1, t2)).not().at()
 // 或使用高级函数模式符号替代 
 eq:V(t1, t2).all:H().not().at()
+
+
+/* 注意同样功能下函数写法和sql写法不一样
+解析方法看谓词的用法
+SQL 模式 (SQL Dialect)
+如果你以 select, insert, update, delete, exec 开头，解析器会进入 SQL 引擎。
+
+语法特征：中间有空格的关键字，如 context by, group by, order by。
+
+作用对象：通常是表（Table）。
+
+适用场景：复杂的数据筛选、关联、聚合分析。
+
+函数式/脚本模式 (Standard Scripting)
+如果你直接调用函数名（如 contextby(...), groupby(...)），解析器会将其作为 内置函数 执行。
+
+语法特征：驼峰命名或全小写且中间无空格的函数名。
+
+作用对象：可以是向量（Vector）、矩阵（Matrix）或表。
+
+适用场景：在自定义函数内部处理逻辑，或者需要将结果直接作为向量返回时。*/
+/* 例如 contextby 和 context by */
+select 
+    trading_day, 
+    instrument_id, 
+    (ret - avg(ret)) / std(ret) as factor 
+from (
+    select trading_day, instrument_id, price/pre_close - 1 as ret from t
+) context by trading_day // sql写法，使用contextby为函数式写法，在同一段脚本中
